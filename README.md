@@ -16,7 +16,7 @@ No Firebase, Cloudflare, paid server, or API key is required.
 5. Under Build and deployment, choose **Deploy from a branch**, branch `main`, folder `/ (root)`, then Save.
 6. Wait for GitHub Pages to publish the site.
 
-Frontend files are `index.html`, `style.css`, `app.js`, `manifest.json`, and `service-worker.js`.
+Frontend files are `index.html`, `style.css`, `pdf-engine.js`, `app.js`, `manifest.json`, and `service-worker.js`.
 
 ## 2. Set up the Google Apps Script backend (one time)
 
@@ -37,27 +37,32 @@ If you edit `Code.gs` later, use **Deploy → Manage deployments → Edit → Ne
 
 ## 3. Use it
 
-1. Upload your question paper PDF and answer key PDF.
-2. Click **Read PDFs**. If the question paper is scanned, use **OCR scanned PDF** instead.
-3. Check the detected question cards. PDF extraction is not perfect: correct question text, marks, answer type and MCQ options if needed.
-4. Add a reference answer / marking points to a question if the answer key was not detected correctly.
-5. Choose Practice or Exam mode, answer the questions and click **Evaluate my paper**.
-6. See question-wise feedback and score. Attempts are also logged in your Google Sheet.
+1. Upload the **question paper PDF** (no answers) and the **answer paper PDF** (correct answers in blue, underlined).
+2. Click **Read PDFs**. The app builds one card per question and finds the correct answers by looking at the blue / underlined text on every page of the answer paper. Scanned PDFs are detected automatically and read with OCR (or press **OCR scanned PDF** to force it).
+3. Check the **Detected answer key** list on the left. Cards marked "No answer detected" need the answer typed into the reference box.
+4. Choose Practice or Exam mode, answer the questions and click **Evaluate my paper**.
+5. Marking happens instantly in your browser. If you set up the optional Apps Script backend, every attempt is also logged to your Google Sheet.
+
+## How the answers are found
+
+- Each word of the answer paper is checked on the rendered page. A word counts as an answer if it is blue, sits on a blue highlighter band, or has a blue underline.
+- MCQs: the option(s) marked in blue become the correct option(s). Options can be `(A)`, `A.`, `A)`, `(a)`, or `(1)` style, on separate lines or all on one line.
+- Fill-in-the-blank, True/False and descriptive questions: the blue text under that question becomes the reference answer.
+- Questions are matched by number (with a text-similarity safety check). Plain answer tables such as "1. B  2. D" are also understood when the answer paper has no highlights.
+- Two-column pages and repeated headers / footers / page numbers are handled.
 
 ## What this build does / important limits
 
+- MCQ, True/False and fill-in-the-blank are marked exactly. Descriptive answers get an **estimated** score from key-term overlap with the reference answer. It is **not** semantic AI grading, so review descriptive answers yourself.
 - Draft answers and local evaluation history autosave in the same browser/device.
-- Apps Script stores submitted results in your Google Sheet.
-- PDF.js extracts selectable text. OCR uses Tesseract.js in English and needs an internet connection.
-- Question parsing is heuristic; review the generated question cards before answering.
-- Apps Script marking is a lightweight answer-key / keyword-coverage estimate. It is **not semantic AI grading** and should not be treated as an official grade, especially for descriptive answers. It awards estimated partial credit for descriptive answers when a reference answer is available.
-- The answer key parser may not reliably identify every answer in complex layouts. If the expected answer shown in feedback is wrong or missing, edit the per-question reference answer before evaluating.
-- The frontend keeps its own history locally. The backend Sheet is the central record of submitted attempts.
-- The Apps Script deployment is accessible to anyone with its URL. Do not store confidential exam material or personal data in a public/shared repository. Anyone who obtains the URL could submit data to the Sheet; redeploy or restrict access if the URL is exposed.
+- PDF.js reads selectable text. OCR uses Tesseract.js in English and needs an internet connection.
+- Question parsing is heuristic; skim the generated cards before answering. Anything wrong can be edited on the card.
+- The Apps Script deployment is accessible to anyone with its URL. Do not store confidential exam material or personal data in a public/shared repository. If you updated the app, also redeploy the latest `Code.gs` (Deploy → Manage deployments → Edit → New version) so logging works.
 
 ## Troubleshooting
 
 - **Backend URL rejected:** copy the full Apps Script Web app URL ending exactly in `/exec`.
 - **Permission / authorization error:** redeploy as `Execute as Me` and `Who has access: Anyone`, then authorize the script.
 - **No row in Google Sheet:** submit one test attempt after deployment and check the Google account that owns the script for the `Jus Exam Study - Results` spreadsheet.
-- **PDF text is blank:** it may be a scanned PDF. Use OCR for the question paper; manually enter reference answers if the answer key is scanned.
+- **"No blue underlined answers were found":** check the two PDFs are in the right slots. If the answer paper is a scan or a photo, press **OCR scanned PDF**.
+- **A few answers missing:** type them into that card's reference box; the card then counts as detected.

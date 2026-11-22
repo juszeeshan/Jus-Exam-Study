@@ -1,0 +1,10 @@
+{
+  "name": "Jus Exam Study",
+  "short_name": "Jus Exam",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#172554",
+  "description": "Personal exam practice and answer evaluation workspace",
+  "icons": []
+}

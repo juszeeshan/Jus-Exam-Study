@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#172554">
+  <title>Jus Exam Study</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">J</div><div><strong>Jus Exam Study</strong><small>Your personal exam practice workspace</small></div></div>
+    <nav>
+      <button class="nav-btn active" data-view="workspace">Workspace</button>
+      <button class="nav-btn" data-view="history">History</button>
+      <button class="nav-btn" data-view="settings">Settings</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="workspaceView" class="view">
+      <div class="page-heading">
+        <div><p class="eyebrow">STUDY • PRACTICE • IMPROVE</p><h1>Exam workspace</h1><p class="muted">Upload the question paper and the answer paper (answers highlighted in blue and underlined), then answer each question in its own space.</p></div>
+        <div class="mode-switch"><span>Mode</span><select id="modeSelect"><option value="practice">Practice mode</option><option value="exam">Exam mode</option></select></div>
+      </div>
+
+      <div class="upload-grid">
+        <label class="upload-card"><span class="upload-icon">📄</span><span><b>Question paper PDF</b><small id="questionFileName">Choose your question paper (without answers)</small></span><input id="questionPdf" type="file" accept="application/pdf"></label>
+        <label class="upload-card"><span class="upload-icon">🗝️</span><span><b>Answer paper PDF</b><small id="keyFileName">Choose the paper with blue underlined answers</small></span><input id="keyPdf" type="file" accept="application/pdf"></label>
+      </div>
+
+      <div class="toolbar">
+        <div><b id="paperTitle">No paper loaded</b><small id="questionCount" class="muted">Upload PDFs to begin</small></div>
+        <div class="toolbar-actions"><button id="extractBtn" class="btn secondary">Read PDFs</button><button id="ocrBtn" class="btn secondary">OCR scanned PDF</button><button id="addQuestionBtn" class="btn secondary">+ Add question</button><button id="exportCsvBtn" class="btn secondary">Export CSV</button><button id="submitBtn" class="btn primary" disabled>Evaluate my paper</button></div>
+      </div>
+
+      <div id="notice" class="notice">Upload both PDFs and click Read PDFs. Jus Exam Study will create the question cards and pick up the correct answers from the blue underlined text in your answer paper. Please review the cards before answering.</div>
+      <div id="workspace" class="workspace-grid">
+        <aside class="paper-panel panel">
+          <div class="panel-head"><div><h2>Question paper</h2><small>Extracted text preview</small></div><span class="pill">PDF 1</span></div>
+          <div id="paperPreview" class="paper-preview empty-state">Your question paper text will appear here after you select a PDF and choose Read PDFs.</div>
+        </aside>
+        <section class="answers-panel">
+          <div class="panel panel-head answer-heading"><div><h2>My answer sheet</h2><small>Answer each question below</small></div><span id="savedStatus" class="save-status">Autosave on</span></div>
+          <div id="questionList" class="question-list"><div class="empty-card"><div class="empty-symbol">✍️</div><h3>Your answer spaces will appear here</h3><p>Upload and read your question paper to get started.</p></div></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="historyView" class="view hidden">
+      <div class="page-heading"><div><p class="eyebrow">YOUR PROGRESS</p><h1>Evaluation history</h1><p class="muted">Your attempts are saved in this browser on this device.</p></div><button id="exportHistoryBtn" class="btn secondary">Export history CSV</button></div>
+      <div id="historyList" class="history-list"></div>
+    </section>
+
+    <section id="settingsView" class="view hidden">
+      <div class="page-heading"><div><p class="eyebrow">ONE-TIME SETUP</p><h1>Google Apps Script</h1><p class="muted">Optional: connect the backend once to keep a copy of every attempt in your Google Sheet.</p></div></div>
+      <div class="panel settings-panel">
+        <h2>Backend URL</h2>
+        <p class="muted">Papers are marked in your browser, so this is not needed to practise. Paste the Web app URL you get after deploying the Apps Script backend only if you want each attempt logged to Google Sheets.</p>
+        <label class="field-label" for="apiEndpoint">Apps Script Web app URL</label>
+        <input id="apiEndpoint" class="text-input" type="url" placeholder="https://script.google.com/macros/s/.../exec">
+        <button id="saveSettings" class="btn primary">Save backend URL</button>
+        <p id="settingsStatus" class="muted"></p>
+        <hr>
+        <h3>Without a backend</h3><p class="muted">You can still practise and get marked. Drafts and history are saved in this browser. The Apps Script backend only records submitted attempts in Google Sheets.</p>
+        <button id="clearHistory" class="btn danger">Clear all local history</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="resultModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card"><button id="closeModal" class="modal-close" aria-label="Close">×</button><div id="resultContent"></div></div>
+  </div>
+  <footer>Jus Exam Study <span>•</span> Your work is autosaved on this device</footer>
+  <script src="pdf-engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
