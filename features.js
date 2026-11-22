@@ -294,6 +294,15 @@
     renderQuestions(); saveDraft(); scrollToCard(q.id);
   }
 
+  /* ======= Section headings (subject · question type) between groups of questions ======= */
+  JusFeatures.css`.fx-section{margin:26px 4px 10px;font-size:11px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--blue)}`;
+  JusFeatures.onCard((card, q, index) => {
+    const prev = state.questions[index - 1];
+    if (q.section && (!prev || prev.section !== q.section)) {
+      const h = document.createElement("div"); h.className = "fx-section"; h.textContent = q.section; card.before(h);
+    }
+  });
+
   /* ======= FEATURE 3: required questions block "Evaluate" ======= */
   document.addEventListener("click", e => {
     if (!e.target.closest("#submitBtn")) return;
