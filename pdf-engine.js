@@ -291,7 +291,7 @@
     return "short";
   }
 
-  function buildQuestion(id, rawWords) {
+  function buildQuestion(id, rawWords, kind) {
     const words = splitGluedMarkers(rawWords);
     const chain = findOptionChain(words);
     let stemWords = words, options = [];
@@ -309,29 +309,94 @@
       let t = wordsToText(o.words); const p = pullMarks(t); t = p.text; if (p.marks != null && marks == null) marks = p.marks;
       return { key: o.key, text: t, hl: o.hl };
     });
-    const type = classify(stem, outOptions);
+    let type = classify(stem, outOptions);
+    if (outOptions.length < 2 && kind) {                                   // the section heading tells us the question type
+      if (kind === "fill" || kind === "tf" || kind === "short" || kind === "long") type = kind;
+    }
     if (marks == null) marks = 1;
     return { id, text: stem, type, marks, options: outOptions, _words: words };
   }
 
+  /* Section headings ("MULTIPLE CHOICE QUESTIONS", "FILL IN THE BLANKS", "QUESTIONS & ANSWERS", subject titles …) */
+  const KIND_RES = [
+    ["mcq", /multiple\s*[- ]?choice|\bmcqs?\b|objective\s+type/i],
+    ["fill", /fill\s+(?:in|up)\s+the\s+blanks?|fill[- ]in|\bblanks?\b/i],
+    ["tf", /true\s*(?:or|\/|&|and)\s*false/i],
+    ["short", /short\s+(?:answer|question|note)s?|very\s+short|brief\s+answer/i],
+    ["long", /long\s+(?:answer|question)s?|descriptive|\bessays?\b|(?:questions?|q)\s*(?:&|and|\/)\s*(?:answers?|ans)\b|answer\s+the\s+following|subjective|theory\s+questions?/i]
+  ];
+  const KIND_LABEL = { mcq: "Multiple choice", fill: "Fill in the blanks", tf: "True / False", short: "Short answers", long: "Questions & answers" };
+  const OPTION_LINE = /^\(?[A-Ea-e][).]\s/;
+  const INSTR = /compulsory|carr(?:y|ies)|\bmarks?\b|attempt|candidates?|time\s*(?:allowed|:)|read\s+(?:the|all)|instruction|do\s+not|negative|answer\s+all|each\s+question/i;
+  const upperRatio = t => { const L = t.replace(/[^A-Za-z]/g, ""); return L.length ? L.replace(/[^A-Z]/g, "").length / L.length : 0; };
+
+  function classifyHeading(l, medianH) {
+    const t = l.text.trim(), words = t.split(/\s+/).length;
+    if (!t || t.length > 100 || QSTART.test(t) || OPTION_LINE.test(t) || /\?$/.test(t)) return null;
+    const big = l.h >= medianH * 1.2, caps = upperRatio(t) >= 0.6 && t.replace(/[^A-Za-z]/g, "").length >= 5;
+    if (words <= 12 && (caps || big || /^(?:part|section|unit|chapter)\b/i.test(t))) {
+      for (const [kind, re] of KIND_RES) if (re.test(t)) return { kind };
+    }
+    const letters = t.replace(/[^A-Za-z]/g, "").length;
+    if (words <= 14 && letters >= 8 && (upperRatio(t) >= 0.75 || (big && t.length < 80))) return { subject: t };
+    return null;
+  }
+
   function parseQuestions(doc) {
     const lines = []; doc.pages.forEach(p => p.lines.forEach(l => lines.push(l)));
+    const hs = lines.map(l => l.h).sort((a, b) => a - b), medianH = hs.length ? hs[Math.floor(hs.length / 2)] : 10;
+    // headings + the section each line belongs to
+    const headingCount = new Array(lines.length), secKind = new Array(lines.length), secSubject = new Array(lines.length);
+    let hc = 0, curKind = null, curSubj = "", prevSubj = false;
+    lines.forEach((l, i) => {
+      const h = classifyHeading(l, medianH);
+      l.isHeading = !!h;
+      if (h) {
+        hc++;
+        if (h.kind) { curKind = h.kind; prevSubj = false; }
+        else { curSubj = prevSubj ? curSubj + " " + h.subject : h.subject; curKind = null; prevSubj = true; }
+      } else prevSubj = false;
+      headingCount[i] = hc; secKind[i] = curKind; secSubject[i] = curSubj;
+    });
+    // question-number candidates (at the left margin of their column)
     const cands = [];
     lines.forEach((l, i) => {
-      if (l.rel > 24) return;
+      if (l.rel > 24 || l.isHeading) return;
       const m = QSTART.exec(l.text); if (!m) return;
       const n = Number(m[1] || m[2]); if (n < 1) return;
       cands.push({ i, n, len: m[0].length });
     });
-    const chain = bestChain(cands), out = [];
-    chain.forEach((c, k) => {
-      const end = k + 1 < chain.length ? chain[k + 1].i : lines.length, words = [];
+    const textOf = (from, to) => { let t = ""; for (let i = from; i < to && i < lines.length; i++) t += lines[i].text + " "; return t; };
+    const hasOpt = (c, k) => /(?:^|\s)\(?[Aa][).]\s.*\(?[Bb][).]\s/.test(textOf(c.i, k + 1 < cands.length ? cands[k + 1].i : lines.length));
+    // Walk the paper from page 1: numbers count up inside a section; a restart (1, 2) after a heading starts a new section.
+    let runs;
+    if (!hc) runs = [bestChain(cands)];
+    else {
+      runs = []; let cur = null, curIdx = [];
+      cands.forEach((c, k) => {
+        if (!cur) { cur = [c]; curIdx = [k]; runs.push(cur); return; }
+        const last = cur[cur.length - 1];
+        if (c.n > last.n && c.n <= last.n + 3) { cur.push(c); curIdx.push(k); return; }
+        if (c.n > 2) return;                                                       // stray number inside a question
+        const instrRun = runs.length === 1 && cur.length <= 10 && !curIdx.some(ci => hasOpt(cands[ci], ci)) && cur.some(x => INSTR.test(lines[x.i].text));
+        if (instrRun) { runs = []; cur = [c]; curIdx = [k]; runs.push(cur); }       // drop an "Instructions: 1. … 2. …" list
+        else if (headingCount[c.i] > headingCount[last.i]) { cur = [c]; curIdx = [k]; runs.push(cur); }
+      });
+    }
+    const acc = [].concat.apply([], runs), out = [];
+    acc.forEach((c, k) => {
+      const end = k + 1 < acc.length ? acc[k + 1].i : lines.length, words = [];
       for (let li = c.i; li < end; li++) {
+        if (li > c.i && lines[li].isHeading) break;                                // a heading ends the question
         let ws = lines[li].words;
         if (li === c.i) ws = consumePrefix(ws, c.len);
         ws.forEach((w, wi) => words.push(wi === 0 && li !== c.i ? Object.assign({}, w, { nl: true }) : w));
       }
-      if (words.length) out.push(buildQuestion(c.n, words));
+      if (!words.length) return;
+      const q = buildQuestion(out.length + 1, words, secKind[c.i]);
+      q.num = c.n;
+      q.section = [secSubject[c.i], secKind[c.i] ? KIND_LABEL[secKind[c.i]] : ""].filter(Boolean).join(" · ");
+      out.push(q);
     });
     return out;
   }
@@ -366,8 +431,8 @@
     let method = "highlights";
     qs.forEach(q => {
       let k = byId.get(q.id);
-      if (k && q.text && k.text && similarity(q.text, k.text) < 0.2) {          // numbering differs between the two PDFs
-        let alt = null, altSim = 0.6;
+      if (k && q.text && k.text && similarity(q.text, k.text) < 0.4) {          // order differs between the two PDFs
+        let alt = null, altSim = 0.5;
         keyQs.forEach(c => { const s = similarity(q.text, c.text); if (s > altSim) { alt = c; altSim = s; } });
         if (alt) k = alt;
       }
@@ -390,15 +455,16 @@
         let ref = highlightedRuns(k._words).map(r => r.replace(/^\(?(?:ans(?:wer)?|a)\)?\s*[:.\-–]\s*/i, "")).filter(Boolean).join("; ");
         if (q.type === "tf" || /^(true|false)$/i.test(ref)) { const m = /\b(true|false)\b/i.exec(ref); if (m) { q.type = "tf"; ref = m[1][0].toUpperCase() + m[1].slice(1).toLowerCase(); } }
         if (ref) q.referenceAnswer = ref;
+        if (ref && (q.type === "short" || q.type === "long")) q.type = ref.split(/\s+/).length > 25 ? "long" : "short";
       }
     });
     // Plain "1. B  2. D ..." answer tables (no highlights) — only when the key is clearly a table, not a copy of the paper
     const have = () => qs.filter(q => hasKey(q)).length;
-    if (have() < qs.length * 0.2 && keyQs.length < qs.length * 0.5) {
+    if (have() < qs.length * 0.2 && keyQs.length < qs.length * 0.5 && new Set(qs.map(q => q.num)).size === qs.length) {
       const grid = parseAnswerGrid(docText(keyDoc));
       if (grid.size >= Math.max(3, qs.length * 0.3)) {
         method = "table";
-        qs.forEach(q => { if (q.type === "mcq" && !hasKey(q) && grid.has(q.id)) { const L = grid.get(q.id); if (q.options.some(o => o.key === L)) setMcqKey(q, [L]); } });
+        qs.forEach(q => { if (q.type === "mcq" && !hasKey(q) && grid.has(q.num)) { const L = grid.get(q.num); if (q.options.some(o => o.key === L)) setMcqKey(q, [L]); } });
       }
     }
     qs.forEach(q => { delete q._words; });
