@@ -476,3 +476,12 @@
 
   global.JusEngine = { readDocument, docText, parseQuestions, applyKey, hasKey, similarity };
 })(window);
+
+/* Loads features.js (edit pencil, themes, accounts, …) by itself, so index.html never needs another change.
+   It runs before app.js on purpose: themes and per-account storage must be ready before the app starts. */
+(function () {
+  if (window.JusFeatures || window.__jusFxLoading) return;
+  window.__jusFxLoading = true;
+  try { document.write('<script src="features.js?v=5"><\/script>'); }
+  catch (e) { var s = document.createElement("script"); s.src = "features.js?v=5"; document.head.appendChild(s); }
+})();
